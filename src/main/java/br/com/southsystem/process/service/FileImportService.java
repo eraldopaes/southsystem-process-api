@@ -22,16 +22,16 @@ import java.io.*;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
+
+import static br.com.southsystem.process.utils.Constants.*;
 
 @Service
 public class FileImportService {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(FileImportService.class);
-    public static final String LINE_WITH_NOT_RECOGNIZED_ENTITY = "Entidade não esperada no arquivo!";
-    public static final String FILE_WITH_ERRORS = "O arquivo possui erros";
+    private static final String LINE_WITH_NOT_RECOGNIZED_ENTITY = "Entidade não esperada no arquivo!";
+    private static final String FILE_WITH_ERRORS = "O arquivo possui erros";
 
     private final FileImportRepository fileImportRepository;
     private final Storage storage;
@@ -67,12 +67,14 @@ public class FileImportService {
 
     private void readFile(InputStream inputStream, FileImport fileImport) {
 
-        AtomicInteger numberOfClients = new AtomicInteger(0);
-        AtomicInteger numberOfSalesman = new AtomicInteger(0);
-        AtomicReference<BigDecimal> biggestSale = new AtomicReference<>(BigDecimal.ZERO);
-        AtomicReference<String> biggestSaleId = new AtomicReference<>("");
-        AtomicReference<BigDecimal> slowestSale = new AtomicReference<>(BigDecimal.valueOf(Long.MAX_VALUE));
-        AtomicReference<String> worstSaleName = new AtomicReference<>("");
+        Integer numberOfClients = 0;
+        Integer numberOfSalesman = 0;
+
+        BigDecimal biggestSale = BigDecimal.ZERO;
+        String biggestSaleId = "";
+
+        BigDecimal slowestSale = BigDecimal.valueOf(Long.MAX_VALUE);
+        String worstSaleName = "";
 
         try {
 
@@ -80,31 +82,30 @@ public class FileImportService {
                     .lines()
                     .collect(Collectors.toList());
 
-            lines.forEach(line -> {
-
-                if (line.startsWith("001")) {
+            for (String line : lines) {
+                if (line.startsWith(PREFIX_SALESMAN)) {
 
                     Salesman salesman = salesmanMapper.lineToSalesman(line);
-                    numberOfSalesman.getAndIncrement();
+                    numberOfSalesman++;
                     LOGGER.info("Vendedor processado: {}", salesman);
 
-                } else if (line.startsWith("002")) {
+                } else if (line.startsWith(PREFIX_CLIENT)) {
 
                     Client client = clientMapper.lineToClient(line);
-                    numberOfClients.getAndIncrement();
+                    numberOfClients++;
                     LOGGER.info("Cliente processado: {}", client);
 
-                } else if (line.startsWith("003")) {
+                } else if (line.startsWith(PREFIX_SALE)) {
 
                     Sale sale = saleMapper.lineToSale(line);
                     BigDecimal totalSale = calculeTotalSale(sale);
-                    if (totalSale.compareTo(biggestSale.get()) >= 0) {
-                        biggestSale.set(totalSale);
-                        biggestSaleId.set(sale.getId());
+                    if (totalSale.compareTo(biggestSale) >= 0) {
+                        biggestSale= totalSale;
+                        biggestSaleId = sale.getId();
                     }
-                    if (totalSale.compareTo(slowestSale.get()) <= 0) {
-                        slowestSale.set(totalSale);
-                        worstSaleName.set(sale.getSalesmanName());
+                    if (totalSale.compareTo(slowestSale) <= 0) {
+                        slowestSale = totalSale;
+                        worstSaleName = sale.getSalesmanName();
                     }
                     LOGGER.info("Venda processada: {}", sale);
 
@@ -112,9 +113,9 @@ public class FileImportService {
                     changeFileImportStatus(fileImport.getId(), FileImportStatusEnum.ERROR, LINE_WITH_NOT_RECOGNIZED_ENTITY);
                     throw new BusinessException("file-import-service.invalid-file");
                 }
-            });
+            }
 
-            writeFile(fileImport.getFilename(), numberOfClients.get(), numberOfSalesman.get(), biggestSaleId.get(), worstSaleName.get());
+            writeFile(fileImport.getFilename(), numberOfClients, numberOfSalesman, biggestSaleId, worstSaleName);
 
         } catch (Exception e) {
 
@@ -137,10 +138,10 @@ public class FileImportService {
     public void writeFile(String filename, Integer numberOfClients, Integer numberOfSalesman, String biggestSaleId, String worstSaleName) throws IOException {
 
         StringBuilder sb = new StringBuilder();
-        sb.append("numberOfClients: ").append(numberOfClients).append("\n")
-                .append("numberOfSalesman: ").append(numberOfSalesman).append("\n")
-                .append("biggestSaleId: ").append(biggestSaleId).append("\n")
-                .append("worstSaleName: ").append(worstSaleName);
+        sb.append(CLIENTS).append(numberOfClients).append("\n")
+                .append(SALESMAN).append(numberOfSalesman).append("\n")
+                .append(ID_BIGGEST_SALE).append(biggestSaleId).append("\n")
+                .append(WORST_SALESMAN).append(worstSaleName);
 
         File file = new File(renameFile(filename));
         FileOutputStream fos = new FileOutputStream(file);
@@ -153,8 +154,8 @@ public class FileImportService {
     }
 
     private String renameFile(String filename) {
-        String filenameWithoutExtension = filename.replace(".dat", "");
-        return filenameWithoutExtension + ".done.dat";
+        String filenameWithoutExtension = filename.replace(DAT_EXTENSION, "");
+        return filenameWithoutExtension + DONE_EXTENSION;
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW, rollbackFor = Exception.class)
