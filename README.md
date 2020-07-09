@@ -8,6 +8,7 @@ Passos do processamento:
  - Validações são feitas. Essas validações foram feitas da forma mais simplista possível, e baseados nos dados passado de exemplo (por exemplo não existe validação se um CPF é real ou não, apenas verifica se é do tamanho dos que passados nos exemplos)
  - Por simplicidade, qualquer erro no arquivo interrompe seu processamento. É possível saber a linha do erro e uma mensagem amigável, visitando o endpoint de consulta de status de um arquivo na API de importação
  - Se o arquivo for processado sem erros, será gerado um relatório que será enviado para o S3 para consulta posterior, o que pode ser feito também na API de importação
+ - Foi realizado deploy de dois pods da API em um cluster na Digital Ocean
  
 Pontos de melhorias:
  - Cobertura maior de testes
