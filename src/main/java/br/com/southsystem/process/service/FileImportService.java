@@ -5,9 +5,8 @@ import br.com.southsystem.process.domain.enums.BucketTypeEnum;
 import br.com.southsystem.process.domain.enums.FileImportStatusEnum;
 import br.com.southsystem.process.dto.FileImportDTO;
 import br.com.southsystem.process.exceptionhandler.BusinessException;
-import br.com.southsystem.process.mapper.ClientMapper;
-import br.com.southsystem.process.mapper.SaleMapper;
-import br.com.southsystem.process.mapper.SalesmanMapper;
+import br.com.southsystem.process.exceptionhandler.FileProcessException;
+import br.com.southsystem.process.mapper.LineMapper;
 import br.com.southsystem.process.repository.FileImportRepository;
 import br.com.southsystem.process.storage.Storage;
 import br.com.southsystem.process.utils.LocalDateTimeUtils;
@@ -31,22 +30,22 @@ public class FileImportService {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(FileImportService.class);
     private static final String LINE_WITH_NOT_RECOGNIZED_ENTITY = "Entidade não esperada no arquivo!";
-    private static final String FILE_WITH_ERRORS = "O arquivo possui erros";
+    private static final String FILE_WITH_ERRORS = "O arquivo possui erro não mapeado";
 
     private final FileImportRepository fileImportRepository;
     private final Storage storage;
-    private final ClientMapper clientMapper;
-    private final SalesmanMapper salesmanMapper;
-    private final SaleMapper saleMapper;
+    private final LineMapper<Client> clientMapper;
+    private final LineMapper<Salesman> salesmanMapper;
+    private final LineMapper<Sale> saleMapper;
     private final LocalDateTimeUtils localDateTimeUtils;
     private final FileImportHistoryService fileImportHistoryService;
 
     @Autowired
     public FileImportService(FileImportRepository fileImportRepository,
                              Storage storage,
-                             ClientMapper clientMapper,
-                             SalesmanMapper salesmanMapper,
-                             SaleMapper saleMapper,
+                             LineMapper<Client> clientMapper,
+                             LineMapper<Salesman> salesmanMapper,
+                             LineMapper<Sale> saleMapper,
                              LocalDateTimeUtils localDateTimeUtils,
                              FileImportHistoryService fileImportHistoryService) {
         this.fileImportRepository = fileImportRepository;
@@ -60,7 +59,7 @@ public class FileImportService {
 
     @Transactional(propagation = Propagation.REQUIRED, noRollbackFor = Exception.class)
     public void process(FileImportDTO fileImportDTO) {
-        FileImport fileImport = changeFileImportStatus(fileImportDTO.getId(), FileImportStatusEnum.PROCESSING, null);
+        FileImport fileImport = changeFileImportStatus(fileImportDTO.getId(), FileImportStatusEnum.PROCESSING, null, null);
         InputStream inputStream = getFile(fileImport);
         readFile(inputStream, fileImport);
     }
@@ -80,27 +79,28 @@ public class FileImportService {
 
             List<String> lines = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))
                     .lines()
+                    .filter(line -> !line.isEmpty())
                     .collect(Collectors.toList());
 
             for (String line : lines) {
                 if (line.startsWith(PREFIX_SALESMAN)) {
 
-                    Salesman salesman = salesmanMapper.lineToSalesman(line);
+                    Salesman salesman = salesmanMapper.lineToEntity(line);
                     numberOfSalesman++;
                     LOGGER.info("Vendedor processado: {}", salesman);
 
                 } else if (line.startsWith(PREFIX_CLIENT)) {
 
-                    Client client = clientMapper.lineToClient(line);
+                    Client client = clientMapper.lineToEntity(line);
                     numberOfClients++;
                     LOGGER.info("Cliente processado: {}", client);
 
                 } else if (line.startsWith(PREFIX_SALE)) {
 
-                    Sale sale = saleMapper.lineToSale(line);
+                    Sale sale = saleMapper.lineToEntity(line);
                     BigDecimal totalSale = calculeTotalSale(sale);
                     if (totalSale.compareTo(biggestSale) >= 0) {
-                        biggestSale= totalSale;
+                        biggestSale = totalSale;
                         biggestSaleId = sale.getId();
                     }
                     if (totalSale.compareTo(slowestSale) <= 0) {
@@ -110,21 +110,20 @@ public class FileImportService {
                     LOGGER.info("Venda processada: {}", sale);
 
                 } else {
-                    changeFileImportStatus(fileImport.getId(), FileImportStatusEnum.ERROR, LINE_WITH_NOT_RECOGNIZED_ENTITY);
-                    throw new BusinessException("file-import-service.invalid-file");
+                    throw new FileProcessException(LINE_WITH_NOT_RECOGNIZED_ENTITY, line);
                 }
             }
 
             writeFile(fileImport.getFilename(), numberOfClients, numberOfSalesman, biggestSaleId, worstSaleName);
 
         } catch (Exception e) {
-
-            if (e instanceof BusinessException) {
-                throw new BusinessException(((BusinessException) e).getErrorCode());
+            if (e instanceof FileProcessException) {
+                changeFileImportStatus(fileImport.getId(), FileImportStatusEnum.ERROR, ((FileProcessException) e).getLine(), e.getMessage());
+                throw new FileProcessException(e.getMessage());
             }
 
-            changeFileImportStatus(fileImport.getId(), FileImportStatusEnum.ERROR, FILE_WITH_ERRORS);
-            throw new BusinessException("file-import-service.invalid-file");
+            changeFileImportStatus(fileImport.getId(), FileImportStatusEnum.ERROR, FILE_WITH_ERRORS, null);
+            throw new BusinessException("Erro não mapeado ao processar arquivos");
         }
     }
 
@@ -159,11 +158,12 @@ public class FileImportService {
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW, rollbackFor = Exception.class)
-    public FileImport changeFileImportStatus(Integer fileImportId, FileImportStatusEnum fileImportStatusEnum, String error) {
+    public FileImport changeFileImportStatus(Integer fileImportId, FileImportStatusEnum fileImportStatusEnum, String line, String error) {
         FileImport fileImport = fileImportRepository.findById(fileImportId)
-                .orElseThrow(() -> new BusinessException("file-import-service.not-found"));
+                .orElseThrow(() -> new FileProcessException("Arquivo não existe"));
         fileImport.setStatus(fileImportStatusEnum);
         fileImport.setError(error);
+        fileImport.setErrorLine(line);
         FileImport fileImportSaved = fileImportRepository.save(fileImport);
 
         FileImportHistory fileImportHistory = new FileImportHistory();

@@ -19,10 +19,10 @@ public class FileImportListener {
     }
 
     @RabbitListener(queues = FILE_IMPORT_QUEUE)
-    public void productImportQueueListener(FileImportDTO fileImportDTO) {
+    public void importFileQueueListener(FileImportDTO fileImportDTO) {
         try {
             fileImportService.process(fileImportDTO);
-            fileImportService.changeFileImportStatus(fileImportDTO.getId(), FileImportStatusEnum.PROCESSED, null);
+            fileImportService.changeFileImportStatus(fileImportDTO.getId(), FileImportStatusEnum.PROCESSED, null, null);
         } catch (Exception e) {
             e.printStackTrace();
         }

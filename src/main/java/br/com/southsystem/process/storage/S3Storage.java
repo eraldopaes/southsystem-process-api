@@ -37,7 +37,7 @@ public class S3Storage implements Storage {
             return file.getName();
         } catch (Exception e) {
             LOGGER.info("Ocorreu um erro ao salvar o arquivo no S3. Detalhes: {}", e.getMessage());
-            throw new BusinessException("storage.error");
+            throw new BusinessException("Erro ao salvar arquivo");
         }
 
     }
@@ -48,7 +48,7 @@ public class S3Storage implements Storage {
             return amazonS3.getObject(s3Property.getBucketName() + "/" + bucketTypeEnum.getName(), filename).getObjectContent();
         } catch (Exception e) {
             LOGGER.error("Não foi possível recuperar o arquivo no S3", e);
-            throw new RuntimeException("Não foi possível recuperar o arquivo");
+            throw new BusinessException("Não foi possível recuperar o arquivo");
         }
     }
 
@@ -67,6 +67,6 @@ public class S3Storage implements Storage {
             return metadata;
         }
 
-        throw new BusinessException("storage.not-found");
+        throw new BusinessException("Erro ao enviar arquivo para o S3");
     }
 }

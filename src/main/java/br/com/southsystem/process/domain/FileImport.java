@@ -2,14 +2,15 @@ package br.com.southsystem.process.domain;
 
 import br.com.southsystem.process.domain.enums.FileImportStatusEnum;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import org.hibernate.annotations.DynamicUpdate;
 
 import javax.persistence.*;
-import java.time.LocalDateTime;
 
 @Data
 @Entity
 @DynamicUpdate
+@EqualsAndHashCode(of = "id")
 @Table(name = "file_import")
 public class FileImport {
     
@@ -27,4 +28,7 @@ public class FileImport {
 
     @Column(name = "file_import_error")
     private String error;
+
+    @Column(name = "file_import_error_line")
+    private String errorLine;
 }

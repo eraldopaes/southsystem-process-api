@@ -22,7 +22,7 @@ public class FileImportHistory {
     @Column(name = "file_import_history_status")
     private FileImportStatusEnum status;
 
-    @OneToOne
+    @ManyToOne
     @JoinColumn(name = "file_import_history_file_import_id", referencedColumnName = "file_import_id")
     private FileImport fileImport;
 
